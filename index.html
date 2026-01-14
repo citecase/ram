@@ -11,6 +11,10 @@
             --text-color: #121212;
             --accent-start: #4CAF50;
             --accent-end: #2E7D32;
+            --danger-start: #ff5252;
+            --danger-end: #d32f2f;
+            --warn-start: #FFC107;
+            --warn-end: #FF9800;
             --surface: #e0e0e0;
         }
 
@@ -39,11 +43,23 @@
             cursor: pointer;
             position: relative;
             z-index: 1;
-            transition: background-color 0.1s;
+            transition: background-color 0.1s, opacity 0.3s;
         }
 
         #app-container:active {
             background-color: #f5f5f5;
+        }
+
+        /* Dim state when paused */
+        #app-container.paused-state {
+            background-color: #f0f0f0;
+            cursor: not-allowed;
+        }
+        
+        #app-container.paused-state #count,
+        #app-container.paused-state #timer-display {
+            opacity: 0.3;
+            filter: grayscale(100%);
         }
 
         /* Large Counter Number */
@@ -54,6 +70,37 @@
             font-variant-numeric: tabular-nums;
             color: #ccc; /* Lighter color so the floating text pops */
             pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        /* Timer Display */
+        #timer-display {
+            font-size: 2rem;
+            font-weight: 300;
+            color: #555;
+            margin-top: 20px;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 1px;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        /* Paused Label Overlay */
+        #paused-label {
+            position: absolute;
+            font-size: 3rem;
+            font-weight: 800;
+            color: #888;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 5;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+        }
+
+        #app-container.paused-state #paused-label {
+            opacity: 1;
         }
 
         /* Controls at the bottom */
@@ -62,9 +109,12 @@
             bottom: 50px;
             display: flex;
             justify-content: center;
+            gap: 15px; /* Space between buttons */
             width: 100%;
             z-index: 10; /* Above the click zone */
             pointer-events: none; /* Allow taps to pass through the empty space around button */
+            flex-wrap: wrap;
+            padding: 0 10px;
         }
 
         /* Mantra Selector */
@@ -92,28 +142,41 @@
 
         button {
             pointer-events: auto; /* Re-enable clicks on the button itself */
-            padding: 18px 48px;
-            font-size: 1.1rem;
+            padding: 15px 25px;
+            font-size: 0.9rem;
             font-weight: 800;
-            letter-spacing: 1.5px;
+            letter-spacing: 1px;
             text-transform: uppercase;
             border: none;
             border-radius: 60px;
             cursor: pointer;
             color: white;
-            background: linear-gradient(135deg, var(--accent-start) 0%, var(--accent-end) 100%);
-            box-shadow: 0 10px 25px rgba(76, 175, 80, 0.4);
             transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
+            min-width: 100px;
         }
 
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 15px 30px rgba(76, 175, 80, 0.5);
         }
 
         button:active {
             transform: scale(0.95);
-            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        /* Specific styles for buttons */
+        #btn-submit {
+            background: linear-gradient(135deg, var(--accent-start) 0%, var(--accent-end) 100%);
+            box-shadow: 0 10px 25px rgba(76, 175, 80, 0.4);
+        }
+
+        #btn-pause {
+            background: linear-gradient(135deg, var(--warn-start) 0%, var(--warn-end) 100%);
+            box-shadow: 0 10px 25px rgba(255, 193, 7, 0.4);
+        }
+
+        #btn-reset {
+            background: linear-gradient(135deg, var(--danger-start) 0%, var(--danger-end) 100%);
+            box-shadow: 0 10px 25px rgba(255, 82, 82, 0.4);
         }
 
         /* Floating Text Animation */
@@ -195,10 +258,14 @@
             <option value="narayana">Om Namo Narayanaya</option>
         </select>
 
+        <div id="timer-display">00:00:00</div>
         <div id="count">0</div>
+        <div id="paused-label">PAUSED</div>
         
         <!-- Controls area -->
         <div id="controls">
+            <button id="btn-reset" onclick="resetCount(event)">Reset</button>
+            <button id="btn-pause" onclick="togglePause(event)">Pause</button>
             <button id="btn-submit" onclick="submitCount(event)">Submit</button>
         </div>
     </div>
@@ -215,10 +282,16 @@
         // --- JAVASCRIPT LOGIC ---
         
         let count = 0;
+        let secondsElapsed = 0;
+        let timerInterval = null;
+        let isPaused = false;
+
         const countDisplay = document.getElementById('count');
+        const timerDisplay = document.getElementById('timer-display');
         const container = document.getElementById('app-container');
         const selector = document.getElementById('chant-selector');
         const tallyModal = document.getElementById('tally-modal');
+        const btnPause = document.getElementById('btn-pause');
 
         // Lists of Chants
         const ramaChants = [
@@ -249,10 +322,15 @@
 
         let activeChantList = ramaChants;
 
-        // 1. Try to load saved count from previous session
-        const saved = localStorage.getItem('simpleCounterValue');
-        if (saved) {
-            count = parseInt(saved, 10);
+        // 1. Try to load saved data from previous session
+        const savedCount = localStorage.getItem('simpleCounterValue');
+        if (savedCount) {
+            count = parseInt(savedCount, 10);
+        }
+
+        const savedTime = localStorage.getItem('simpleCounterTime');
+        if (savedTime) {
+            secondsElapsed = parseInt(savedTime, 10);
         }
 
         // Load saved mantra preference
@@ -266,6 +344,7 @@
         
         // Initialize display
         updateDisplay();
+        updateTimerDisplay();
 
         // 2. Main Count Function
         container.addEventListener('mousedown', handleInteraction);
@@ -279,8 +358,14 @@
         }, { passive: false });
 
         function handleInteraction(e) {
-            // Ignore if clicking the buttons
+            // Ignore if clicking the buttons or if Paused
             if (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT') return;
+            if (isPaused) return;
+
+            // Start timer on first interaction if not running
+            if (!timerInterval) {
+                startTimer();
+            }
 
             // Increment
             count++;
@@ -301,6 +386,78 @@
                 activeChantList = ramaChants;
             }
             localStorage.setItem('selectedMantra', value);
+        }
+
+        // --- TIMER LOGIC ---
+
+        function startTimer() {
+            if (timerInterval) return;
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                updateTimerDisplay();
+                localStorage.setItem('simpleCounterTime', secondsElapsed);
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function togglePause(event) {
+            event.stopPropagation();
+            isPaused = !isPaused;
+
+            if (isPaused) {
+                stopTimer();
+                btnPause.innerText = "Resume";
+                container.classList.add('paused-state');
+            } else {
+                startTimer();
+                btnPause.innerText = "Pause";
+                container.classList.remove('paused-state');
+            }
+        }
+
+        function updateTimerDisplay() {
+            const hrs = Math.floor(secondsElapsed / 3600);
+            const mins = Math.floor((secondsElapsed % 3600) / 60);
+            const secs = secondsElapsed % 60;
+
+            const formatted = 
+                (hrs > 0 ? pad(hrs) + ':' : '') + 
+                pad(mins) + ':' + 
+                pad(secs);
+
+            timerDisplay.innerText = formatted;
+        }
+
+        function pad(num) {
+            return num.toString().padStart(2, '0');
+        }
+
+        function resetCount(event) {
+            event.stopPropagation();
+            if (confirm("Are you sure you want to reset the counter and timer to 0?")) {
+                // Reset Count
+                count = 0;
+                updateDisplay();
+
+                // Reset Timer
+                stopTimer();
+                secondsElapsed = 0;
+                updateTimerDisplay();
+                localStorage.setItem('simpleCounterTime', 0);
+                
+                // Reset UI State
+                isPaused = false;
+                btnPause.innerText = "Pause";
+                container.classList.remove('paused-state');
+                
+                // Note: We don't restart timer automatically, wait for next tap
+            }
         }
 
         function submitCount(event) {
