@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tap Counter</title>
+    <style>
+        /* --- CSS STYLES --- */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #121212;
+            --accent-start: #4CAF50;
+            --accent-end: #2E7D32;
+            --surface: #e0e0e0;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden; /* Prevent scrolling */
+            user-select: none; /* Prevent text selection */
+            touch-action: manipulation; /* Optimize for touch */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* The main container acts as the button */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            position: relative;
+            z-index: 1;
+            transition: background-color 0.1s;
+        }
+
+        #app-container:active {
+            background-color: #f5f5f5;
+        }
+
+        /* Large Counter Number */
+        #count {
+            font-size: 25vw; /* Responsive size */
+            font-weight: bold;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            color: #ccc; /* Lighter color so the floating text pops */
+            pointer-events: none;
+        }
+
+        /* Controls at the bottom */
+        #controls {
+            position: absolute;
+            bottom: 50px;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            z-index: 10; /* Above the click zone */
+            pointer-events: none; /* Allow taps to pass through the empty space around button */
+        }
+
+        /* Mantra Selector */
+        #chant-selector {
+            position: absolute;
+            top: 40px;
+            left: 50%; /* Center horizontally */
+            transform: translateX(-50%); /* Adjust for element width */
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            background-color: rgba(255, 255, 255, 0.95);
+            color: #333;
+            font-size: 1rem;
+            font-weight: 500;
+            z-index: 20;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            outline: none;
+            cursor: pointer;
+            -webkit-appearance: none; /* Remove default styling on iOS */
+            appearance: none;
+            text-align: center;
+            text-align-last: center; /* Ensure selected text is centered */
+        }
+
+        button {
+            pointer-events: auto; /* Re-enable clicks on the button itself */
+            padding: 18px 48px;
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 60px;
+            cursor: pointer;
+            color: white;
+            background: linear-gradient(135deg, var(--accent-start) 0%, var(--accent-end) 100%);
+            box-shadow: 0 10px 25px rgba(76, 175, 80, 0.4);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(76, 175, 80, 0.5);
+        }
+
+        button:active {
+            transform: scale(0.95);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        /* Floating Text Animation */
+        .floating-chant {
+            position: absolute;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #121212;
+            pointer-events: none;
+            white-space: nowrap;
+            text-shadow: 0 2px 4px rgba(255,255,255,0.8);
+            transform: translate(-50%, -50%) scale(0.5);
+            animation: floatUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            z-index: 100;
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+            10% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -150%) scale(1);
+            }
+        }
+
+        /* Modal Overlay for Tally */
+        #tally-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            z-index: 2000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #close-modal-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #f1f1f1;
+            color: #333;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            box-shadow: none;
+            font-size: 0.9rem;
+            z-index: 2001;
+            letter-spacing: normal;
+            text-transform: none;
+        }
+        
+        #close-modal-btn:hover {
+            background: #e0e0e0;
+            transform: none;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- The entire screen is the button -->
+    <div id="app-container">
+        
+        <!-- Mantra Selector -->
+        <select id="chant-selector" onchange="changeMantra(this.value)">
+            <option value="rama">Ram Ram</option>
+            <option value="narayana">Om Namo Narayanaya</option>
+        </select>
+
+        <div id="count">0</div>
+        
+        <!-- Controls area -->
+        <div id="controls">
+            <button id="btn-submit" onclick="submitCount(event)">Submit</button>
+        </div>
+    </div>
+
+    <!-- Tally Modal -->
+    <div id="tally-modal">
+        <button id="close-modal-btn" onclick="closeModal()">Close</button>
+        <div style="width: 100%; max-width: 600px; padding: 20px;">
+            <iframe data-tally-src="https://tally.so/embed/1A4vyM?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1" loading="lazy" width="100%" height="281" frameborder="0" marginheight="0" marginwidth="0" title="ramram"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // --- JAVASCRIPT LOGIC ---
+        
+        let count = 0;
+        const countDisplay = document.getElementById('count');
+        const container = document.getElementById('app-container');
+        const selector = document.getElementById('chant-selector');
+        const tallyModal = document.getElementById('tally-modal');
+
+        // Lists of Chants
+        const ramaChants = [
+            "Ram Ram",       // English
+            "राम",           // Hindi
+            "রাম",           // Bengali
+            "இராமன்",        // Tamil
+            "రాముడు",        // Telugu
+            "ರಾಮ",           // Kannada
+            "രാമൻ",          // Malayalam
+            "રામ",           // Gujarati
+            "ରାମ",           // Odia
+            "ਰਾਮ"            // Punjabi
+        ];
+
+        const narayanaChants = [
+            "Om Namo Narayanaya", // English
+            "ॐ नमो नारायणाय",    // Sanskrit/Hindi/Marathi/Nepali
+            "ஓம் நமோ நாராயணாய",  // Tamil
+            "ఓం నమో నారాయణాయ",   // Telugu
+            "ಓಂ ನಮೋ ನಾರಾಯಣಾಯ",   // Kannada
+            "ഓം നമോ നാരായണായ", // Malayalam
+            "ওঁ নমো নারায়ণায়",   // Bengali
+            "ૐ નમો નારાયણાય",    // Gujarati
+            "ଓଁ ନମୋ ନାରାୟଣାୟ",    // Odia
+            "ਓਮ ਨਮੋ ਨਾਰਾਇਣਾਯ"    // Punjabi
+        ];
+
+        let activeChantList = ramaChants;
+
+        // 1. Try to load saved count from previous session
+        const saved = localStorage.getItem('simpleCounterValue');
+        if (saved) {
+            count = parseInt(saved, 10);
+        }
+
+        // Load saved mantra preference
+        const savedMantra = localStorage.getItem('selectedMantra');
+        if (savedMantra) {
+            selector.value = savedMantra;
+            if (savedMantra === 'narayana') {
+                activeChantList = narayanaChants;
+            }
+        }
+        
+        // Initialize display
+        updateDisplay();
+
+        // 2. Main Count Function
+        container.addEventListener('mousedown', handleInteraction);
+        container.addEventListener('touchstart', (e) => {
+            // Prevent default to stop double-firing on some devices
+            // But allow button clicks to pass through
+            if(e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') {
+                e.preventDefault(); 
+                handleInteraction(e.touches[0]);
+            }
+        }, { passive: false });
+
+        function handleInteraction(e) {
+            // Ignore if clicking the buttons
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT') return;
+
+            // Increment
+            count++;
+            updateDisplay();
+            
+            // Show Floating Text at Click Location
+            const currentChant = getChantText(count);
+            spawnFloatingText(e.clientX, e.clientY, currentChant);
+            
+            // Vibrate (Mobile only)
+            if (navigator.vibrate) navigator.vibrate(10);
+        }
+
+        function changeMantra(value) {
+            if (value === 'narayana') {
+                activeChantList = narayanaChants;
+            } else {
+                activeChantList = ramaChants;
+            }
+            localStorage.setItem('selectedMantra', value);
+        }
+
+        function submitCount(event) {
+            event.stopPropagation();
+            // Open the modal overlay
+            tallyModal.style.display = 'flex';
+            
+            // Trigger Tally script logic to load the embed if it hasn't already
+            if (typeof Tally !== 'undefined') {
+                Tally.loadEmbeds();
+            }
+        }
+
+        function closeModal() {
+            tallyModal.style.display = 'none';
+        }
+
+        function updateDisplay() {
+            countDisplay.innerText = count;
+            localStorage.setItem('simpleCounterValue', count);
+        }
+
+        function getChantText(currentCount) {
+             if (currentCount === 0) return "";
+             // Cycle through the active list.
+             const index = (currentCount - 1) % activeChantList.length;
+             return activeChantList[index];
+        }
+
+        function spawnFloatingText(x, y, text) {
+            const el = document.createElement("span");
+            el.innerText = text;
+            el.classList.add("floating-chant");
+            
+            // Position exactly at click
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            container.appendChild(el);
+
+            // Remove element after animation ends (1000ms)
+            setTimeout(() => {
+                el.remove();
+            }, 1000);
+        }
+
+        // Tally Embed Script
+        var d=document,w="https://tally.so/widgets/embed.js",v=function(){"undefined"!=typeof Tally?Tally.loadEmbeds():d.querySelectorAll("iframe[data-tally-src]:not([src])").forEach((function(e){e.src=e.dataset.tallySrc}))};if("undefined"!=typeof Tally)v();else if(d.querySelector('script[src="'+w+'"]')==null){var s=d.createElement("script");s.src=w,s.onload=v,s.onerror=v,d.body.appendChild(s);}
+    </script>
+</body>
+</html>
